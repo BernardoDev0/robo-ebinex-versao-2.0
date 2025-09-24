@@ -1,10 +1,27 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { Download } from "lucide-react";
+import { Download, Clock, Volume2, TrendingUp, TrendingDown, AlertTriangle, Activity } from "lucide-react";
+import { 
+  calculateRSI, 
+  calculateStochRSI, 
+  calculateMACD, 
+  calculateEMA, 
+  calculateATR, 
+  detectCandlePatterns, 
+  calculateWeightedConfluence, 
+  getNextCandleTimer, 
+  getTradingSession, 
+  AlertSystem,
+  runBacktest,
+  createBacktestStrategy,
+  type SignalData,
+  type CandleData,
+  type BacktestResult
+} from "@/lib/tradingUtils";
 
 interface AnalysisResult {
   direction: string;
@@ -21,6 +38,11 @@ interface AnalysisResult {
   expiration?: string;
   timeframe?: string;
   detailedReasons?: string[];
+  stochRSI?: { K: number; D: number; signal: string };
+  atr?: { value: number; level: string; percentage: number };
+  patterns?: string[];
+  tradingSession?: { quality: string; recommendation: string };
+  confluenceDetails?: any;
 }
 
 interface AnalysisLog {
@@ -46,10 +68,19 @@ interface AnalysisLog {
 export function AnalysisPanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [apiKey, setApiKey] = useState(process.env.VITE_GROQ_API_KEY)
+  const [apiKey, setApiKey] = useState(import.meta.env?.VITE_GROQ_API_KEY || '')
   const [selectedModel, setSelectedModel] = useState("openai/gpt-oss-120b");
   const [analysisLogs, setAnalysisLogs] = useState<AnalysisLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
+  
+  // Novos estados para funcionalidades melhoradas
+  const [nextCandleTimer, setNextCandleTimer] = useState(getNextCandleTimer('5m'));
+  const [tradingSession, setTradingSession] = useState(getTradingSession());
+  const [alertSystem] = useState(new AlertSystem());
+  const [showBacktest, setShowBacktest] = useState(false);
+  const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
+  const [isBacktesting, setIsBacktesting] = useState(false);
+  const timerRef = useRef<number>();
 
   // Função para salvar log da análise
   const saveAnalysisLog = (result: AnalysisResult, realData: any, provider: string, model?: string) => {
@@ -157,7 +188,34 @@ export function AnalysisPanel() {
   // Carregar logs ao montar o componente
   useEffect(() => {
     loadAnalysisLogs();
+    
+    // Solicitar permissão para notificações
+    alertSystem.requestPermission();
   }, []);
+  
+  // Timer para próxima vela
+  useEffect(() => {
+    const updateTimer = () => {
+      setNextCandleTimer(getNextCandleTimer('5m'));
+      setTradingSession(getTradingSession());
+    };
+    
+    // Atualizar a cada segundo
+    timerRef.current = setInterval(updateTimer, 1000);
+    
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+  
+  // Alertas baseados no timer
+  useEffect(() => {
+    if (nextCandleTimer.alert30s && !nextCandleTimer.alert10s) {
+      alertSystem.notifySignal('TIMER');
+    }
+  }, [nextCandleTimer.alert30s, nextCandleTimer.alert10s, alertSystem]);
 
   // Modelos disponíveis do Groq
   const groqModels = [
@@ -361,10 +419,10 @@ export function AnalysisPanel() {
     };
   };
 
-  // Função para buscar dados reais do Bitcoin com análise multi-timeframe
+  // Função para buscar dados reais do Bitcoin com análise multi-timeframe melhorada
   const fetchRealBitcoinData = async () => {
     try {
-      console.log('🔍 Buscando dados reais do Bitcoin (Multi-Timeframe)...');
+      console.log('🔍 Buscando dados reais do Bitcoin (Multi-Timeframe Melhorado)...');
       // Buscar dados atuais do Bitcoin
       const priceResponse = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
       const priceData = await priceResponse.json();
@@ -376,7 +434,7 @@ export function AnalysisPanel() {
       console.log('📊 Dados 1H obtidos:', kline1hData.length, 'velas');
       
       // Buscar dados de 5 minutos
-      const kline5mResponse = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=100');
+      const kline5mResponse = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=200');
       const kline5mData = await kline5mResponse.json();
       console.log('📊 Dados 5M obtidos:', kline5mData.length, 'velas');
       
@@ -400,6 +458,12 @@ export function AnalysisPanel() {
       console.log('📊 RSI 1H calculado:', currentRSI1h);
       console.log('📊 RSI 5M calculado:', currentRSI5m);
       
+      // Calcular Stochastic RSI para ambos os timeframes
+      const stochRSI1h = calculateStochRSI(rsi1h);
+      const stochRSI5m = calculateStochRSI(rsi5m);
+      console.log('📊 Stoch RSI 1H:', stochRSI1h);
+      console.log('📊 Stoch RSI 5M:', stochRSI5m);
+      
       // Calcular MACD para ambos os timeframes
       const macd1h = calculateMACD(closes1h, 12, 26, 9);
       const macd5m = calculateMACD(closes5m, 12, 26, 9);
@@ -420,17 +484,70 @@ export function AnalysisPanel() {
       const ema21_5m = calculateEMA(closes5m, 21);
       const ema50_5m = calculateEMA(closes5m, 50);
       
+      // Calcular ATR para volatilidade
+      const atr = calculateATR(highs5m, lows5m, closes5m);
+      console.log('📊 ATR calculado:', atr);
+      
+      // Detectar padrões de candlestick
+      const candleData: CandleData[] = kline5mData.slice(-5).map((k: any) => ({
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5])
+      }));
+      const patterns = detectCandlePatterns(candleData);
+      console.log('📊 Padrões detectados:', patterns);
+      
       // Dados atuais
       const currentPrice = parseFloat(priceData.lastPrice);
       const priceChange24h = parseFloat(priceData.priceChangePercent);
       const volume24h = parseFloat(priceData.volume);
       
+      // Preparar dados para análise de confluência
+      const signalData: SignalData = {
+        rsi1h: currentRSI1h,
+        rsi5m: currentRSI5m,
+        stochRSI1h: stochRSI1h,
+        stochRSI5m: stochRSI5m,
+        macd1h: { ...macd1h, histogram: macd1h.macd.map((m, i) => m - (macd1h.signal[i] || 0)) },
+        macd5m: { ...macd5m, histogram: macd5m.macd.map((m, i) => m - (macd5m.signal[i] || 0)) },
+        ema1h: {
+          ema9: ema9_1h[ema9_1h.length - 1],
+          ema21: ema21_1h[ema21_1h.length - 1],
+          ema50: ema50_1h[ema50_1h.length - 1],
+          ema200: ema200_1h[ema200_1h.length - 1],
+          aligned: ema9_1h[ema9_1h.length - 1] > ema21_1h[ema21_1h.length - 1] && 
+                   ema21_1h[ema21_1h.length - 1] > ema50_1h[ema50_1h.length - 1]
+        },
+        ema5m: {
+          ema9: ema9_5m[ema9_5m.length - 1],
+          ema21: ema21_5m[ema21_5m.length - 1],
+          ema50: ema50_5m[ema50_5m.length - 1],
+          aligned: ema9_5m[ema9_5m.length - 1] > ema21_5m[ema21_5m.length - 1] && 
+                   ema21_5m[ema21_5m.length - 1] > ema50_5m[ema50_5m.length - 1]
+        },
+        volume: {
+          current: volume24h,
+          average: volumes5m.reduce((a, b) => a + b, 0) / volumes5m.length,
+          above_average: volume24h > volumes5m.reduce((a, b) => a + b, 0) / volumes5m.length
+        },
+        atr: atr,
+        patterns: patterns,
+        currentPrice: currentPrice
+      };
+      
+      // Calcular confluências
+      const confluence = calculateWeightedConfluence(signalData);
+      console.log('📊 Confluências calculadas:', confluence);
+
       return {
         currentPrice,
         priceChange24h,
         volume24h,
         // Dados 1H
         rsi1h: currentRSI1h,
+        stochRSI1h: stochRSI1h,
         macd1h: currentMACD1h,
         macdSignal1h: currentSignal1h,
         ema9_1h: ema9_1h[ema9_1h.length - 1],
@@ -443,6 +560,7 @@ export function AnalysisPanel() {
         volumes1h: volumes1h.slice(-20),
         // Dados 5M
         rsi5m: currentRSI5m,
+        stochRSI5m: stochRSI5m,
         macd5m: currentMACD5m,
         macdSignal5m: currentSignal5m,
         ema9_5m: ema9_5m[ema9_5m.length - 1],
@@ -452,6 +570,11 @@ export function AnalysisPanel() {
         lows5m: lows5m.slice(-20),
         closes5m: closes5m.slice(-20),
         volumes5m: volumes5m.slice(-20),
+        // Novas funcionalidades
+        atr: atr,
+        patterns: patterns,
+        confluence: confluence,
+        signalData: signalData,
         // Dados combinados para compatibilidade
         rsi: currentRSI5m, // Usar 5M como principal
         macd: currentMACD5m,
@@ -537,77 +660,172 @@ export function AnalysisPanel() {
   };
 
   // Função para gerar análise baseada em dados reais
+  // Função para executar backtesting
+  const runBacktestAnalysis = async () => {
+    setIsBacktesting(true);
+    setBacktestResult(null);
+    
+    try {
+      // Buscar dados históricos para backtesting
+      const response = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&limit=1000');
+      const data = await response.json();
+      
+      const historicalData: CandleData[] = data.map((k: any) => ({
+        open: parseFloat(k[1]),
+        high: parseFloat(k[2]),
+        low: parseFloat(k[3]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5])
+      }));
+      
+      const strategy = createBacktestStrategy();
+      const result = runBacktest(historicalData, strategy, 1000, 0.02, 70);
+      
+      setBacktestResult(result);
+      
+      toast({
+        title: "Backtesting concluído!",
+        description: `${result.totalTrades} trades simulados. Taxa de acerto: ${result.winRate.toFixed(1)}%`,
+      });
+    } catch (error) {
+      console.error('Erro no backtesting:', error);
+      toast({
+        title: "Erro no backtesting",
+        description: "Não foi possível executar o backtesting.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsBacktesting(false);
+    }
+  };
+
   const generateRealAnalysis = (realData: any): AnalysisResult => {
-    console.log('🎯 Gerando análise com dados reais:', {
+    console.log('🎯 Gerando análise melhorada com dados reais:', {
       price: realData.currentPrice,
-      rsi: realData.rsi,
-      macd: realData.macd,
-      macdSignal: realData.macdSignal
+      confluence: realData.confluence,
+      atr: realData.atr,
+      patterns: realData.patterns
     });
     
-    // Análise baseada em dados reais
-    const rsi = realData.rsi;
-    const macd = realData.macd;
-    const macdSignal = realData.macdSignal;
+    // Usar os dados da confluência calculada
+    const confluence = realData.confluence;
+    const atr = realData.atr;
+    const patterns = realData.patterns;
+    const stochRSI5m = realData.stochRSI5m;
     const currentPrice = realData.currentPrice;
-    const ema9 = realData.ema9;
-    const ema21 = realData.ema21;
-    const ema50 = realData.ema50;
-    const ema200 = realData.ema200;
+    const tradingSession = getTradingSession();
     
-    // Determinar tendência baseada nas EMAs
-    const emaAlignment = ema9 > ema21 && ema21 > ema50 && ema50 > ema200 ? 'alta' :
-                        ema9 < ema21 && ema21 < ema50 && ema50 < ema200 ? 'baixa' : 'lateral';
-    
-    // Análise do RSI
-    const rsiSignal = rsi > 70 ? 'sobrecomprado' : rsi < 30 ? 'sobrevendido' : 'neutro';
-    
-    // Análise do MACD
-    const macdSignalType = macd > macdSignal ? 'positivo' : 'negativo';
-    
-    // Calcular confluências
-    const confluences = [
-      rsiSignal === 'sobrevendido' || (rsi > 50 && rsi < 70),
-      macdSignalType === 'positivo',
-      emaAlignment === 'alta',
-      currentPrice > ema9
-    ].filter(Boolean).length;
-    
-    // Determinar direção baseada em confluências
+    // Determinar direção baseada na confluência melhorada
     let direction = 'AGUARDAR';
-    let confidence = 50;
+    let confidence = confluence.percentage;
+    let riskLevel = 'MÉDIO';
+    let expiration = '5min';
     
-    if (confluences >= 3) {
-      if (rsiSignal === 'sobrevendido' && macdSignalType === 'positivo' && emaAlignment === 'alta') {
+    // Ajustar confiança baseada na volatilidade
+    if (atr.level === 'ALTO') {
+      confidence *= 0.85; // Reduzir confiança em 15% em alta volatilidade
+      riskLevel = 'ALTO';
+    } else if (atr.level === 'BAIXO') {
+      confidence *= 1.1; // Aumentar confiança em 10% em baixa volatilidade
+      riskLevel = 'BAIXO';
+    }
+    
+    // Ajustar baseado na sessão de trading
+    if (tradingSession.quality === 'EVITAR' || tradingSession.quality === 'FIM DE SEMANA') {
+      confidence *= 0.7; // Reduzir significativamente
+      riskLevel = 'ALTO';
+    } else if (tradingSession.quality === 'EXCELENTE') {
+      confidence *= 1.15; // Aumentar confiança
+    }
+    
+    // Determinar direção final
+    if (confidence >= 75) {
+      // Análise mais sofisticada para determinar direção
+      const bullishIndicators = [
+        realData.rsi5m < 70 && realData.rsi5m > 30,
+        stochRSI5m.oversold || (stochRSI5m.crossover && stochRSI5m.K[stochRSI5m.K.length - 1] < 80),
+        realData.macd5m > realData.macdSignal5m,
+        realData.ema5m.aligned && realData.currentPrice > realData.ema9_5m,
+        patterns.some(p => p.signal === 'BULLISH'),
+        realData.volume.above_average
+      ];
+      
+      const bearishIndicators = [
+        realData.rsi5m < 70 && realData.rsi5m > 30,
+        stochRSI5m.overbought || (stochRSI5m.crossover && stochRSI5m.K[stochRSI5m.K.length - 1] > 20),
+        realData.macd5m < realData.macdSignal5m,
+        !realData.ema5m.aligned && realData.currentPrice < realData.ema9_5m,
+        patterns.some(p => p.signal === 'BEARISH'),
+        realData.volume.above_average
+      ];
+      
+      const bullishCount = bullishIndicators.filter(Boolean).length;
+      const bearishCount = bearishIndicators.filter(Boolean).length;
+      
+      if (bullishCount > bearishCount && bullishCount >= 4) {
         direction = 'COMPRA';
-        confidence = 85;
-      } else if (rsiSignal === 'sobrecomprado' && macdSignalType === 'negativo' && emaAlignment === 'baixa') {
+        // Tocar alerta sonoro
+        alertSystem.notifySignal('COMPRA');
+      } else if (bearishCount > bullishCount && bearishCount >= 4) {
         direction = 'VENDA';
-        confidence = 85;
-      } else if (confluences >= 2) {
-        direction = emaAlignment === 'alta' ? 'COMPRA' : 'VENDA';
-        confidence = 75;
+        // Tocar alerta sonoro
+        alertSystem.notifySignal('VENDA');
+      }
+      
+      // Determinar expiração baseada na força do sinal
+      if (confidence >= 90) {
+        expiration = '15min';
+      } else if (confidence >= 85) {
+        expiration = '10min';
       }
     }
     
-    // Se confiança < 70%, forçar AGUARDAR
-    if (confidence < 70) {
+    // Garantir que confiança não exceda 100%
+    confidence = Math.min(100, Math.max(0, confidence));
+    
+    // Se confiança < 75%, forçar AGUARDAR
+    if (confidence < 75) {
       direction = 'AGUARDAR';
-      confidence = 60;
     }
     
     const sentiment = direction === 'COMPRA' ? 'Bullish' : direction === 'VENDA' ? 'Bearish' : 'Neutro';
     
     return {
       direction,
-      confidence,
+      confidence: Math.round(confidence),
       price: `$${currentPrice.toFixed(2)}`,
       sentiment,
-      analysis: `Análise baseada em dados reais: RSI ${rsi.toFixed(2)} (${rsiSignal}), MACD ${macd.toFixed(4)} (${macdSignalType}), EMAs alinhadas para ${emaAlignment}. Confluência: ${confluences}/4 indicadores. ${direction === 'AGUARDAR' ? 'Aguardando melhor setup.' : `Sinal ${direction.toLowerCase()} identificado.`}`,
-      reasoning: `Análise técnica real: RSI em ${rsi.toFixed(2)} indica ${rsiSignal}, MACD ${macd.toFixed(4)} vs Signal ${macdSignal.toFixed(4)} mostra ${macdSignalType}, EMAs (9:${ema9.toFixed(2)}, 21:${ema21.toFixed(2)}, 50:${ema50.toFixed(2)}, 200:${ema200.toFixed(2)}) alinhadas para ${emaAlignment}. ${confluences >= 3 ? 'Setup forte com' : 'Setup fraco com apenas'} ${confluences} confluências. ${direction !== 'AGUARDAR' ? 'Entrada na próxima vela de 5min.' : 'Aguardando confluência de 70%+.'}`,
+      analysis: `Análise Multi-Timeframe Melhorada: Confluência ${confluence.score.toFixed(1)}/${confluence.maxScore} (${confluence.percentage.toFixed(1)}%). ATR: ${atr.level} (${atr.percentage.toFixed(2)}%). Padrões: ${patterns.map(p => p.name).join(', ') || 'Nenhum'}. Sessão: ${tradingSession.quality}. ${direction === 'AGUARDAR' ? 'Aguardando melhor confluência.' : `Sinal ${direction.toLowerCase()} identificado com força ${confluence.signalStrength}.`}`,
+      reasoning: `Análise técnica avançada: ${Object.entries(confluence.details).map(([key, detail]: [string, any]) => detail.description).join(', ')}. Volatilidade ${atr.level} ajustou confiança. ${tradingSession.quality !== 'REGULAR' ? `Horário de trading: ${tradingSession.recommendation}.` : ''} ${direction !== 'AGUARDAR' ? 'Entrada na próxima vela de 5min.' : 'Aguardando confluência de 75%+.'}`,
       entry: "Próxima vela 5m",
       stopLoss: "N/A (Binary Option)",
-      takeProfit: "N/A (Binary Option)"
+      takeProfit: "N/A (Binary Option)",
+      confluences: Math.round(confluence.score),
+      riskLevel: riskLevel,
+      expiration: expiration,
+      timeframe: "1h + 5min",
+      stochRSI: {
+        K: stochRSI5m.K[stochRSI5m.K.length - 1] || 50,
+        D: stochRSI5m.D[stochRSI5m.D.length - 1] || 50,
+        signal: stochRSI5m.oversold ? 'Sobrevendido' : stochRSI5m.overbought ? 'Sobrecomprado' : stochRSI5m.crossover ? 'Cruzamento' : 'Neutro'
+      },
+      atr: atr,
+      patterns: patterns.map(p => p.name),
+      tradingSession: tradingSession,
+      confluenceDetails: confluence.details,
+      detailedReasons: [
+        `RSI 1H: ${realData.rsi1h.toFixed(2)} - ${realData.rsi1h > 70 ? 'Sobrecomprado' : realData.rsi1h < 30 ? 'Sobrevendido' : 'Neutro'}`,
+        `RSI 5M: ${realData.rsi5m.toFixed(2)} - ${realData.rsi5m > 70 ? 'Sobrecomprado' : realData.rsi5m < 30 ? 'Sobrevendido' : 'Neutro'}`,
+        `Stoch RSI 5M: ${stochRSI5m.oversold ? 'Sobrevendido' : stochRSI5m.overbought ? 'Sobrecomprado' : 'Normal'}`,
+        `MACD 1H: ${realData.macd1h > realData.macdSignal1h ? 'Bullish' : 'Bearish'}`,
+        `MACD 5M: ${realData.macd5m > realData.macdSignal5m ? 'Bullish' : 'Bearish'}`,
+        `EMAs 1H: ${realData.ema1h.aligned ? 'Alinhadas para Alta' : 'Mistas'}`,
+        `EMAs 5M: ${realData.ema5m.aligned ? 'Alinhadas para Alta' : 'Mistas'}`,
+        `ATR: ${atr.level} - Volatilidade ${atr.percentage.toFixed(2)}%`,
+        `Volume: ${realData.volume.above_average ? 'Acima da média' : 'Normal'}`,
+        `Padrões: ${patterns.length > 0 ? patterns.map(p => p.name).join(', ') : 'Nenhum padrão detectado'}`,
+        `Horário: ${tradingSession.quality} - ${tradingSession.recommendation}`
+      ]
     };
   };
 
@@ -967,13 +1185,58 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
           </div>
         </div>
 
-        {/* Current Price - Dados Reais */}
-        <div className="text-center">
-          <div className="text-3xl font-bold text-foreground mb-2">
-            {analysisResult?.price || '$114,996.09'}
+        {/* Current Price e Timer - Dados Reais */}
+        <div className="space-y-3">
+          <div className="text-center">
+            <div className="text-3xl font-bold text-foreground mb-2">
+              {analysisResult?.price || '$114,996.09'}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              📊 Dados em tempo real via Binance API
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            📊 Dados em tempo real via Binance API
+          
+          {/* Timer para próxima vela */}
+          <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-700/30 rounded-lg p-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-blue-400" />
+                <span className="text-sm font-medium text-blue-300">Próxima Vela 5M</span>
+              </div>
+              <div className={`text-lg font-bold ${nextCandleTimer.alert30s ? 'text-red-400 animate-pulse' : 'text-blue-400'}`}>
+                {String(nextCandleTimer.minutes).padStart(2, '0')}:{String(nextCandleTimer.seconds).padStart(2, '0')}
+              </div>
+            </div>
+            {nextCandleTimer.alert30s && (
+              <div className="text-xs text-red-300 mt-1 text-center animate-pulse">
+                ⚠️ Entrada em {nextCandleTimer.totalSeconds}s
+              </div>
+            )}
+          </div>
+          
+          {/* Sessão de Trading */}
+          <div className={`border rounded-lg p-3 backdrop-blur-sm ${
+            tradingSession.quality === 'EXCELENTE' ? 'bg-green-900/30 border-green-700/30' :
+            tradingSession.quality === 'BOM' ? 'bg-blue-900/30 border-blue-700/30' :
+            tradingSession.quality === 'EVITAR' ? 'bg-red-900/30 border-red-700/30' :
+            'bg-gray-900/30 border-gray-700/30'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                <span className="text-sm font-medium">Sessão de Trading</span>
+              </div>
+              <Badge variant={
+                tradingSession.quality === 'EXCELENTE' ? 'default' :
+                tradingSession.quality === 'BOM' ? 'secondary' :
+                tradingSession.quality === 'EVITAR' ? 'destructive' : 'outline'
+              }>
+                {tradingSession.quality}
+              </Badge>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {tradingSession.recommendation}
+            </div>
           </div>
         </div>
 
@@ -1030,7 +1293,7 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Expiração:</span>
-                  <span className="text-warning font-medium">5 minutos</span>
+                  <span className="text-warning font-medium">{analysisResult.expiration || '5min'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tipo:</span>
@@ -1042,26 +1305,63 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
                     {analysisResult.confidence}%
                   </span>
                 </div>
-                {(analysisResult as any).confluences && (
+                {analysisResult.confluences && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Confluências:</span>
-                    <span className={`font-bold ${(analysisResult as any).confluences >= 7 ? 'text-success' : (analysisResult as any).confluences >= 5 ? 'text-warning' : 'text-danger'}`}>
-                      {(analysisResult as any).confluences}/10
+                    <span className={`font-bold ${analysisResult.confluences >= 12 ? 'text-success' : analysisResult.confluences >= 8 ? 'text-warning' : 'text-danger'}`}>
+                      {analysisResult.confluences}/18
                     </span>
                   </div>
                 )}
-                {(analysisResult as any).riskLevel && (
+                {analysisResult.riskLevel && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Risco:</span>
                     <span className={`font-bold ${
-                      (analysisResult as any).riskLevel === 'BAIXO' ? 'text-success' : 
-                      (analysisResult as any).riskLevel === 'MÉDIO' ? 'text-warning' : 'text-danger'
+                      analysisResult.riskLevel === 'BAIXO' ? 'text-success' : 
+                      analysisResult.riskLevel === 'MÉDIO' ? 'text-warning' : 'text-danger'
                     }`}>
-                      {(analysisResult as any).riskLevel}
+                      {analysisResult.riskLevel}
+                    </span>
+                  </div>
+                )}
+                {analysisResult.stochRSI && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Stoch RSI:</span>
+                    <span className={`font-medium ${
+                      analysisResult.stochRSI.signal === 'Sobrevendido' ? 'text-green-400' :
+                      analysisResult.stochRSI.signal === 'Sobrecomprado' ? 'text-red-400' :
+                      analysisResult.stochRSI.signal === 'Cruzamento' ? 'text-blue-400' : 'text-gray-400'
+                    }`}>
+                      {analysisResult.stochRSI.signal}
+                    </span>
+                  </div>
+                )}
+                {analysisResult.atr && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Volatilidade:</span>
+                    <span className={`font-medium ${
+                      analysisResult.atr.level === 'BAIXO' ? 'text-green-400' :
+                      analysisResult.atr.level === 'MÉDIO' ? 'text-yellow-400' : 'text-red-400'
+                    }`}>
+                      {analysisResult.atr.level} ({analysisResult.atr.percentage.toFixed(2)}%)
                     </span>
                   </div>
                 )}
               </div>
+              
+              {/* Padrões de Candlestick */}
+              {analysisResult.patterns && analysisResult.patterns.length > 0 && (
+                <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 border border-purple-700/30 rounded p-2">
+                  <div className="text-sm font-medium text-purple-300 mb-1">📊 Padrões Detectados:</div>
+                  <div className="flex flex-wrap gap-1">
+                    {analysisResult.patterns.map((pattern, index) => (
+                      <Badge key={index} variant="outline" className="text-xs border-purple-500/50 text-purple-300">
+                        {pattern}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Analysis Summary */}
               <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
@@ -1105,22 +1405,79 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
           )}
         </div>
 
-        {/* Botões Glass */}
-        <div className="flex gap-3 justify-center">
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md shadow-lg"
-          >
-            🔔 Alertas
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md shadow-lg"
-          >
-            ⚙️ Configurações
-          </Button>
+        {/* Botões Glass - Funcionalidades Melhoradas */}
+        <div className="space-y-3">
+          <div className="flex gap-2 justify-center">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => alertSystem.notifySignal('ALERTA')}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md shadow-lg"
+            >
+              <Volume2 className="h-3 w-3 mr-1" />
+              🔔 Teste Alerta
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowBacktest(!showBacktest)}
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-md shadow-lg"
+            >
+              <TrendingUp className="h-3 w-3 mr-1" />
+              📊 Backtest
+            </Button>
+          </div>
+          
+          {/* Botão de Backtesting */}
+          {showBacktest && (
+            <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 border border-indigo-700/30 rounded-lg p-3 backdrop-blur-sm">
+              <div className="space-y-3">
+                <div className="text-center">
+                  <div className="text-sm font-medium text-indigo-300 mb-2">Sistema de Backtesting</div>
+                  <Button 
+                    onClick={runBacktestAnalysis}
+                    disabled={isBacktesting}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700"
+                  >
+                    {isBacktesting ? '⏳ Executando...' : '🚀 Executar Backtest (1000 velas)'}
+                  </Button>
+                </div>
+                
+                {backtestResult && (
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="text-indigo-300">Total Trades</div>
+                        <div className="font-bold text-white">{backtestResult.totalTrades}</div>
+                      </div>
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="text-indigo-300">Taxa de Acerto</div>
+                        <div className={`font-bold ${backtestResult.winRate >= 60 ? 'text-green-400' : 'text-red-400'}`}>
+                          {backtestResult.winRate.toFixed(1)}%
+                        </div>
+                      </div>
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="text-indigo-300">ROI</div>
+                        <div className={`font-bold ${backtestResult.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {backtestResult.roi.toFixed(1)}%
+                        </div>
+                      </div>
+                      <div className="bg-black/20 p-2 rounded">
+                        <div className="text-indigo-300">Profit Factor</div>
+                        <div className={`font-bold ${backtestResult.profitFactor >= 1 ? 'text-green-400' : 'text-red-400'}`}>
+                          {backtestResult.profitFactor.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-center text-indigo-200">
+                      Saldo Final: ${backtestResult.finalBalance.toFixed(2)} | 
+                      Max Drawdown: {backtestResult.maxDrawdownPercentage.toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
