@@ -68,7 +68,7 @@ interface AnalysisLog {
 export function AnalysisPanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [apiKey, setApiKey] = useState(import.meta.env?.VITE_GROQ_API_KEY || '')
+  const [apiKey, setApiKey] = useState('')
   const [selectedModel, setSelectedModel] = useState("openai/gpt-oss-120b");
   const [analysisLogs, setAnalysisLogs] = useState<AnalysisLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
@@ -201,11 +201,11 @@ export function AnalysisPanel() {
     };
     
     // Atualizar a cada segundo
-    timerRef.current = setInterval(updateTimer, 1000);
+    timerRef.current = window.setInterval(updateTimer, 1000);
     
     return () => {
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        window.clearInterval(timerRef.current);
       }
     };
   }, []);
@@ -217,105 +217,15 @@ export function AnalysisPanel() {
     }
   }, [nextCandleTimer.alert30s, nextCandleTimer.alert10s, alertSystem]);
 
-  // Modelos disponíveis do Groq
-  const groqModels = [
-    {
-      id: "llama-3.1-8b-instant",
-      name: "Llama 3.1 8B Instant",
-      description: "Rápido e eficiente para análises básicas",
-      category: "Text Generation",
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐"
-    },
-    {
-      id: "llama-3.1-70b-versatile",
-      name: "Llama 3.1 70B Versatile", 
-      description: "Modelo mais poderoso para análises complexas",
-      category: "Text Generation",
-      speed: "🚀 Rápido",
-      quality: "⭐⭐⭐⭐⭐"
-    },
-    {
-      id: "llama-3.3-70b-versatile",
-      name: "Llama 3.3 70B Versatile",
-      description: "Versão mais recente com melhor performance",
-      category: "Text Generation", 
-      speed: "🚀 Rápido",
-      quality: "⭐⭐⭐⭐⭐"
-    },
-    {
-      id: "llama-3.1-405b-versatile",
-      name: "Llama 3.1 405B Versatile",
-      description: "Modelo gigante para máxima precisão",
-      category: "Text Generation",
-      speed: "🐌 Lento",
-      quality: "⭐⭐⭐⭐⭐⭐"
-    },
-    {
-      id: "mixtral-8x7b-32768",
-      name: "Mixtral 8x7B 32K",
-      description: "Modelo misto com contexto expandido",
-      category: "Text Generation",
-      speed: "⚡ Muito Rápido", 
-      quality: "⭐⭐⭐⭐"
-    },
-    {
-      id: "gemma-7b-it",
-      name: "Gemma 7B IT",
-      description: "Modelo Google otimizado para instruções",
-      category: "Text Generation",
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐⭐"
-    },
-    {
-      id: "gemma-2-9b-it",
-      name: "Gemma 2 9B IT", 
-      description: "Versão mais recente do Gemma",
-      category: "Text Generation",
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐⭐"
-    },
-    {
-      id: "qwen-2.5-72b-instruct",
-      name: "Qwen 2.5 72B Instruct",
-      description: "Modelo chinês com excelente performance",
-      category: "Text Generation",
-      speed: "🚀 Rápido",
-      quality: "⭐⭐⭐⭐⭐"
-    },
-    {
-      id: "qwen-2.5-7b-instruct",
-      name: "Qwen 2.5 7B Instruct",
-      description: "Versão compacta do Qwen",
-      category: "Text Generation", 
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐⭐"
-    },
-    {
-      id: "llama-3.3-8b-instruct",
-      name: "Llama 3.3 8B Instruct",
-      description: "Versão mais recente do Llama 8B",
-      category: "Text Generation",
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐⭐"
-    },
-    {
-      id: "openai/gpt-oss-120b",
-      name: "GPT OSS 120B",
-      description: "Modelo GPT de código aberto com 120B parâmetros",
-      category: "Multilingual",
-      speed: "🚀 Rápido",
-      quality: "⭐⭐⭐⭐⭐⭐"
-    },
-    {
-      id: "openai/gpt-oss-20b",
-      name: "GPT OSS 20B",
-      description: "Modelo GPT de código aberto com 20B parâmetros",
-      category: "Multilingual",
-      speed: "⚡ Muito Rápido",
-      quality: "⭐⭐⭐⭐⭐"
-    }
-  ];
+  // Modelo fixo GPT OSS 120B
+  const selectedModelInfo = {
+    id: "openai/gpt-oss-120b",
+    name: "GPT OSS 120B",
+    description: "Modelo GPT de código aberto com 120B parâmetros",
+    category: "Multilingual",
+    speed: "🚀 Rápido",
+    quality: "⭐⭐⭐⭐⭐⭐"
+  };
 
   const analysisSteps = [
     "Verificando RSI, MACD e Stochastic RSI",
@@ -328,14 +238,6 @@ export function AnalysisPanel() {
   const [currentStep, setCurrentStep] = useState(0);
 
   const handleAnalysis = async () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "API Key necessária",
-        description: "Por favor, insira sua API key do Groq para continuar.",
-        variant: "destructive"
-      });
-      return;
-    }
 
     setIsAnalyzing(true);
     setCurrentStep(0);
@@ -348,14 +250,19 @@ export function AnalysisPanel() {
     }
 
     try {
-      const result = await callAIProvider("groq", apiKey);
+      // Buscar dados reais do Bitcoin
+      const realData = await fetchRealBitcoinData();
+      
+      if (!realData) {
+        throw new Error('Não foi possível buscar dados reais do Bitcoin');
+      }
+      
+      // Gerar análise baseada em dados reais
+      const result = generateRealAnalysis(realData);
       setAnalysisResult(result);
       
       // Salvar log da análise
-      const realData = await fetchRealBitcoinData();
-      if (realData) {
-        saveAnalysisLog(result, realData, "groq", selectedModel);
-      }
+      saveAnalysisLog(result, realData, "algoritmo-proprio", selectedModelInfo.name);
 
       toast({
         title: "Análise concluída!",
@@ -829,325 +736,6 @@ export function AnalysisPanel() {
     };
   };
 
-  const callAIProvider = async (provider: string, key: string): Promise<AnalysisResult> => {
-    // Buscar dados reais do Bitcoin
-    const realData = await fetchRealBitcoinData();
-    
-    if (!realData) {
-      console.warn('Não foi possível buscar dados reais, tentando novamente...');
-      // Tentar novamente com dados reais
-      const retryData = await fetchRealBitcoinData();
-      if (retryData) {
-        return generateRealAnalysis(retryData);
-      }
-      // Se ainda falhar, usar dados demo como último recurso
-      return generateDemoAnalysis();
-    }
-
-    // Calcular confluências multi-timeframe para o prompt
-    const confluences = [
-      // TIMEFRAME 1H (8 pontos)
-      realData.rsi1h > 30 && realData.rsi1h < 70 ? 2 : realData.rsi1h < 30 || realData.rsi1h > 70 ? 1 : 0,
-      realData.macd1h > realData.macdSignal1h ? 2 : 1,
-      realData.ema9_1h > realData.ema21_1h && realData.ema21_1h > realData.ema50_1h ? 2 : realData.ema9_1h < realData.ema21_1h && realData.ema21_1h < realData.ema50_1h ? 2 : 0,
-      realData.currentPrice > realData.ema9_1h ? 2 : 0,
-      // TIMEFRAME 5M (5 pontos)
-      realData.rsi5m > 30 && realData.rsi5m < 70 ? 1 : realData.rsi5m < 30 || realData.rsi5m > 70 ? 0.5 : 0,
-      realData.macd5m > realData.macdSignal5m ? 1 : 0.5,
-      realData.ema9_5m > realData.ema21_5m && realData.ema21_5m > realData.ema50_5m ? 1 : realData.ema9_5m < realData.ema21_5m && realData.ema21_5m < realData.ema50_5m ? 1 : 0,
-      realData.currentPrice > realData.ema9_5m ? 1 : 0,
-      // VOLUME E ESTRUTURA (2 pontos)
-      realData.volume24h > 50000000 ? 2 : 1
-    ].reduce((a, b) => a + b, 0);
-
-    const prompt = `# 🎯 ANÁLISE TÉCNICA PROFISSIONAL MULTI-TIMEFRAME - BITCOIN BINARY OPTIONS
-
-## 📋 CONTEXTO OPERACIONAL
-Você é um **ANALISTA TÉCNICO SÊNIOR** especializado em Bitcoin com 15+ anos de experiência em trading institucional. Sua missão é fornecer uma análise precisa para uma operação binária no Bitcoin, baseada EXCLUSIVAMENTE nos dados técnicos reais fornecidos de MÚLTIPLOS TIMEFRAMES.
-
-## 📊 DADOS DE MERCADO REAIS - ${new Date().toLocaleString('pt-BR')}
-
-### 💰 INFORMAÇÕES FUNDAMENTAIS
-- **Preço Atual**: $${realData.currentPrice.toFixed(2)}
-- **Variação 24h**: ${realData.priceChange24h.toFixed(2)}%
-- **Volume 24h**: ${realData.volume24h.toLocaleString()} BTC
-- **Timestamp**: ${new Date().toISOString()}
-
-### 📈 ANÁLISE MULTI-TIMEFRAME
-
-#### 🕐 TIMEFRAME 1 HORA (Tendência Principal)
-**RSI (14 períodos)**: ${realData.rsi1h.toFixed(2)}
-- Zona: ${realData.rsi1h > 70 ? 'SOBRECOMPRADO' : realData.rsi1h < 30 ? 'SOBREVENDIDO' : 'NEUTRO'}
-- Interpretação: ${realData.rsi1h > 70 ? 'Possível reversão para baixa' : realData.rsi1h < 30 ? 'Possível reversão para alta' : 'Momentum equilibrado'}
-
-**MACD (12,26,9)**:
-- MACD Line: ${realData.macd1h.toFixed(4)}
-- Signal Line: ${realData.macdSignal1h.toFixed(4)}
-- Histograma: ${(realData.macd1h - realData.macdSignal1h).toFixed(4)}
-- Sinal: ${realData.macd1h > realData.macdSignal1h ? 'BULLISH (Compra)' : 'BEARISH (Venda)'}
-
-**MÉDIAS MÓVEIS EXPONENCIAIS (1H)**:
-- EMA 9: $${realData.ema9_1h.toFixed(2)} ${realData.currentPrice > realData.ema9_1h ? '↑' : '↓'}
-- EMA 21: $${realData.ema21_1h.toFixed(2)} ${realData.currentPrice > realData.ema21_1h ? '↑' : '↓'}
-- EMA 50: $${realData.ema50_1h.toFixed(2)} ${realData.currentPrice > realData.ema50_1h ? '↑' : '↓'}
-- EMA 200: $${realData.ema200_1h.toFixed(2)} ${realData.currentPrice > realData.ema200_1h ? '↑' : '↓'}
-
-**ALINHAMENTO DAS EMAs (1H)**: ${realData.ema9_1h > realData.ema21_1h && realData.ema21_1h > realData.ema50_1h && realData.ema50_1h > realData.ema200_1h ? 'ALTA (Bullish)' : realData.ema9_1h < realData.ema21_1h && realData.ema21_1h < realData.ema50_1h && realData.ema50_1h < realData.ema200_1h ? 'BAIXA (Bearish)' : 'LATERAL (Neutral)'}
-
-#### ⚡ TIMEFRAME 5 MINUTOS (Entrada)
-**RSI (14 períodos)**: ${realData.rsi5m.toFixed(2)}
-- Zona: ${realData.rsi5m > 70 ? 'SOBRECOMPRADO' : realData.rsi5m < 30 ? 'SOBREVENDIDO' : 'NEUTRO'}
-- Interpretação: ${realData.rsi5m > 70 ? 'Possível reversão para baixa' : realData.rsi5m < 30 ? 'Possível reversão para alta' : 'Momentum equilibrado'}
-
-**MACD (12,26,9)**:
-- MACD Line: ${realData.macd5m.toFixed(4)}
-- Signal Line: ${realData.macdSignal5m.toFixed(4)}
-- Histograma: ${(realData.macd5m - realData.macdSignal5m).toFixed(4)}
-- Sinal: ${realData.macd5m > realData.macdSignal5m ? 'BULLISH (Compra)' : 'BEARISH (Venda)'}
-
-**MÉDIAS MÓVEIS EXPONENCIAIS (5M)**:
-- EMA 9: $${realData.ema9_5m.toFixed(2)} ${realData.currentPrice > realData.ema9_5m ? '↑' : '↓'}
-- EMA 21: $${realData.ema21_5m.toFixed(2)} ${realData.currentPrice > realData.ema21_5m ? '↑' : '↓'}
-- EMA 50: $${realData.ema50_5m.toFixed(2)} ${realData.currentPrice > realData.ema50_5m ? '↑' : '↓'}
-
-**ALINHAMENTO DAS EMAs (5M)**: ${realData.ema9_5m > realData.ema21_5m && realData.ema21_5m > realData.ema50_5m ? 'ALTA (Bullish)' : realData.ema9_5m < realData.ema21_5m && realData.ema21_5m < realData.ema50_5m ? 'BAIXA (Bearish)' : 'LATERAL (Neutral)'}
-
-### 📊 ESTRUTURA DE PREÇOS (Últimas 20 Velas)
-**Máximas**: ${realData.highs.map(h => h.toFixed(2)).join(', ')}
-**Mínimas**: ${realData.lows.map(l => l.toFixed(2)).join(', ')}
-**Fechamentos**: ${realData.closes.map(c => c.toFixed(2)).join(', ')}
-
-**Análise de Suporte/Resistência**:
-- Resistência Principal: $${Math.max(...realData.highs).toFixed(2)}
-- Suporte Principal: $${Math.min(...realData.lows).toFixed(2)}
-- Range Atual: ${(Math.max(...realData.highs) - Math.min(...realData.lows)).toFixed(2)} pontos
-
-## 🔍 METODOLOGIA DE ANÁLISE TÉCNICA MULTI-TIMEFRAME
-
-### 1. **ANÁLISE DE MOMENTUM MULTI-TIMEFRAME**
-**1H (Tendência Principal)**:
-- RSI ${realData.rsi1h.toFixed(2)} indica: ${realData.rsi1h > 70 ? 'MOMENTUM DE ALTA EXCESSIVO - Possível correção' : realData.rsi1h < 30 ? 'MOMENTUM DE BAIXA EXCESSIVO - Possível recuperação' : 'MOMENTUM EQUILIBRADO'}
-- Divergências: ${realData.rsi1h > 50 ? 'Tendência de alta mantida' : 'Tendência de baixa mantida'}
-
-**5M (Entrada)**:
-- RSI ${realData.rsi5m.toFixed(2)} indica: ${realData.rsi5m > 70 ? 'MOMENTUM DE ALTA EXCESSIVO - Possível correção' : realData.rsi5m < 30 ? 'MOMENTUM DE BAIXA EXCESSIVO - Possível recuperação' : 'MOMENTUM EQUILIBRADO'}
-- Divergências: ${realData.rsi5m > 50 ? 'Tendência de alta mantida' : 'Tendência de baixa mantida'}
-
-### 2. **ANÁLISE DE TENDÊNCIA MULTI-TIMEFRAME**
-**1H (Tendência Principal)**:
-- MACD ${realData.macd1h.toFixed(4)} vs Signal ${realData.macdSignal1h.toFixed(4)}: ${realData.macd1h > realData.macdSignal1h ? 'CRUZAMENTO BULLISH - Sinal de compra' : 'CRUZAMENTO BEARISH - Sinal de venda'}
-- Histograma: ${(realData.macd1h - realData.macdSignal1h).toFixed(4)} ${(realData.macd1h - realData.macdSignal1h) > 0 ? '(Acelerando alta)' : '(Acelerando baixa)'}
-
-**5M (Entrada)**:
-- MACD ${realData.macd5m.toFixed(4)} vs Signal ${realData.macdSignal5m.toFixed(4)}: ${realData.macd5m > realData.macdSignal5m ? 'CRUZAMENTO BULLISH - Sinal de compra' : 'CRUZAMENTO BEARISH - Sinal de venda'}
-- Histograma: ${(realData.macd5m - realData.macdSignal5m).toFixed(4)} ${(realData.macd5m - realData.macdSignal5m) > 0 ? '(Acelerando alta)' : '(Acelerando baixa)'}
-
-### 3. **ANÁLISE DE TENDÊNCIA PRINCIPAL MULTI-TIMEFRAME**
-**1H (Tendência Principal)**:
-- Alinhamento: ${realData.ema9_1h > realData.ema21_1h && realData.ema21_1h > realData.ema50_1h ? 'BULLISH STRONG' : realData.ema9_1h < realData.ema21_1h && realData.ema21_1h < realData.ema50_1h ? 'BEARISH STRONG' : 'MIXED SIGNALS'}
-- Posição do Preço: ${realData.currentPrice > realData.ema9_1h ? 'ACIMA da EMA 9 (Suporte)' : 'ABAIXO da EMA 9 (Resistência)'}
-
-**5M (Entrada)**:
-- Alinhamento: ${realData.ema9_5m > realData.ema21_5m && realData.ema21_5m > realData.ema50_5m ? 'BULLISH STRONG' : realData.ema9_5m < realData.ema21_5m && realData.ema21_5m < realData.ema50_5m ? 'BEARISH STRONG' : 'MIXED SIGNALS'}
-- Posição do Preço: ${realData.currentPrice > realData.ema9_5m ? 'ACIMA da EMA 9 (Suporte)' : 'ABAIXO da EMA 9 (Resistência)'}
-
-### 4. **ANÁLISE DE VOLUME E ESTRUTURA**
-- Volume 24h: ${realData.volume24h.toLocaleString()} BTC
-- Volume Status: ${realData.volume24h > 50000000 ? 'ALTO - Confirma movimento' : 'NORMAL - Aguardar confirmação'}
-
-## 🎯 SISTEMA DE CONFLUÊNCIAS MULTI-TIMEFRAME
-
-### **PONTUAÇÃO DE CONFLUÊNCIA** (0-15 pontos):
-**TIMEFRAME 1H (Tendência Principal) - 8 pontos**:
-- RSI 1H Favorável: ${realData.rsi1h > 30 && realData.rsi1h < 70 ? '2 pontos' : realData.rsi1h < 30 || realData.rsi1h > 70 ? '1 ponto' : '0 pontos'}
-- MACD 1H Favorável: ${realData.macd1h > realData.macdSignal1h ? '2 pontos' : '1 ponto'}
-- EMAs 1H Alinhadas: ${realData.ema9_1h > realData.ema21_1h && realData.ema21_1h > realData.ema50_1h ? '2 pontos' : realData.ema9_1h < realData.ema21_1h && realData.ema21_1h < realData.ema50_1h ? '2 pontos' : '0 pontos'}
-- Preço vs EMAs 1H: ${realData.currentPrice > realData.ema9_1h ? '2 pontos' : '0 pontos'}
-
-**TIMEFRAME 5M (Entrada) - 5 pontos**:
-- RSI 5M Favorável: ${realData.rsi5m > 30 && realData.rsi5m < 70 ? '1 ponto' : realData.rsi5m < 30 || realData.rsi5m > 70 ? '0.5 pontos' : '0 pontos'}
-- MACD 5M Favorável: ${realData.macd5m > realData.macdSignal5m ? '1 ponto' : '0.5 pontos'}
-- EMAs 5M Alinhadas: ${realData.ema9_5m > realData.ema21_5m && realData.ema21_5m > realData.ema50_5m ? '1 ponto' : realData.ema9_5m < realData.ema21_5m && realData.ema21_5m < realData.ema50_5m ? '1 ponto' : '0 pontos'}
-- Preço vs EMAs 5M: ${realData.currentPrice > realData.ema9_5m ? '1 ponto' : '0 pontos'}
-
-**VOLUME E ESTRUTURA - 2 pontos**:
-- Volume Confirma: ${realData.volume24h > 50000000 ? '2 pontos' : '1 ponto'}
-
-**TOTAL DE CONFLUÊNCIAS**: ${confluences}/15 pontos
-
-## 🚨 REGRAS DE NEGOCIAÇÃO BINÁRIA MULTI-TIMEFRAME
-
-### **CRITÉRIOS PARA SINAL**:
-- **MÍNIMO 10/15 confluências** para sinal de COMPRA/VENDA
-- **MÁXIMO 9/15 confluências** = AGUARDAR
-- **Confiança mínima**: 75%
-- **Confiança ideal**: 85%+
-
-### **GESTÃO DE RISCO**:
-- Operação binária: Ganha tudo ou perde tudo
-- Sem stop loss possível
-- Entrada: Próxima vela de 5 minutos
-- Expiração: Baseada na análise técnica (5min, 15min, 30min, 1h)
-
-### **DETERMINAÇÃO DE EXPIRAÇÃO**:
-- **5 minutos**: Confluências 10-12, confiança 75-85%
-- **15 minutos**: Confluências 12-14, confiança 85-90%
-- **30 minutos**: Confluências 14-15, confiança 90-95%
-- **1 hora**: Confluências 15, confiança 95%+
-
-## 📋 FORMATO DE RESPOSTA OBRIGATÓRIO
-
-Responda APENAS no formato JSON abaixo, sem texto adicional:
-
-{
-  "direction": "COMPRA|VENDA|AGUARDAR",
-  "confidence": 75-100,
-  "price": "$${realData.currentPrice.toFixed(2)}",
-  "sentiment": "Bullish|Bearish|Neutral",
-  "analysis": "Análise técnica detalhada com números específicos e justificativa baseada nos dados reais fornecidos",
-  "reasoning": "Raciocínio lógico passo-a-passo explicando como chegou à conclusão baseada nas confluências identificadas",
-  "entry": "Próxima vela 5m",
-  "stopLoss": "N/A (Binary Option)",
-  "takeProfit": "N/A (Binary Option)",
-  "confluences": ${confluences},
-  "risk_level": "BAIXO|MÉDIO|ALTO",
-  "expiration": "5min|15min|30min|1h",
-  "timeframe": "1h + 5min",
-  "detailedReasons": [
-    "Motivo 1: RSI 1H ${realData.rsi1h.toFixed(2)} - ${realData.rsi1h > 70 ? 'Sobrecarregado' : realData.rsi1h < 30 ? 'Sobrevendido' : 'Neutro'}",
-    "Motivo 2: RSI 5M ${realData.rsi5m.toFixed(2)} - ${realData.rsi5m > 70 ? 'Sobrecarregado' : realData.rsi5m < 30 ? 'Sobrevendido' : 'Neutro'}",
-    "Motivo 3: MACD 1H ${realData.macd1h > realData.macdSignal1h ? 'Bullish' : 'Bearish'}",
-    "Motivo 4: MACD 5M ${realData.macd5m > realData.macdSignal5m ? 'Bullish' : 'Bearish'}",
-    "Motivo 5: EMAs 1H ${realData.ema9_1h > realData.ema21_1h && realData.ema21_1h > realData.ema50_1h ? 'Alinhadas para Alta' : realData.ema9_1h < realData.ema21_1h && realData.ema21_1h < realData.ema50_1h ? 'Alinhadas para Baixa' : 'Mistas'}",
-    "Motivo 6: EMAs 5M ${realData.ema9_5m > realData.ema21_5m && realData.ema21_5m > realData.ema50_5m ? 'Alinhadas para Alta' : realData.ema9_5m < realData.ema21_5m && realData.ema21_5m < realData.ema50_5m ? 'Alinhadas para Baixa' : 'Mistas'}",
-    "Motivo 7: Volume ${realData.volume24h > 50000000 ? 'Alto - Confirma movimento' : 'Normal - Aguardar confirmação'}"
-  ]
-}
-
-## ⚠️ INSTRUÇÕES CRÍTICAS
-
-1. **USE EXCLUSIVAMENTE** os dados técnicos fornecidos
-2. **CALCULE** a pontuação de confluências corretamente
-3. **JUSTIFIQUE** cada decisão com números específicos
-4. **SEJA CONSERVADOR** - melhor AGUARDAR que operar sem certeza
-5. **FOQUE** na precisão técnica, não em especulação
-6. **ANALISE** a estrutura de preços para suportes/resistências
-7. **CONSIDERE** o volume como confirmador do movimento
-
-## 🎯 OBJETIVO FINAL
-Fornecer uma análise técnica profissional e precisa para operação binária de 5 minutos no Bitcoin, baseada em dados reais e metodologia científica de análise técnica.
-
-**IMPORTANTE**: Responda APENAS no formato JSON solicitado, sem texto adicional.`;
-    
-    let response;
-    
-    switch (provider) {
-      case "huggingface":
-        response = await fetch("https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium", {
-          headers: { Authorization: `Bearer ${key}` },
-          method: "POST",
-          body: JSON.stringify({ inputs: prompt }),
-        });
-        break;
-        
-      case "cohere":
-        response = await fetch("https://api.cohere.ai/v1/generate", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "command-light",
-            prompt: prompt,
-            max_tokens: 300,
-          }),
-        });
-        break;
-        
-      case "groq":
-        response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${key}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: prompt }],
-            model: selectedModel,
-            temperature: 0.3,
-            max_tokens: 2000,
-          }),
-        });
-        break;
-        
-      default:
-        throw new Error("Provider não suportado");
-    }
-
-    if (!response.ok) {
-      throw new Error(`Erro na API: ${response.status}`);
-    }
-
-    const responseData = await response.json();
-    let aiResponse = '';
-    
-    // Processar resposta baseada no provedor
-    switch (provider) {
-      case "huggingface":
-        aiResponse = responseData[0]?.generated_text || '';
-        break;
-      case "cohere":
-        aiResponse = responseData.generations?.[0]?.text || '';
-        break;
-      case "groq":
-        aiResponse = responseData.choices?.[0]?.message?.content || '';
-        break;
-      default:
-        aiResponse = '';
-    }
-
-    // Tentar extrair JSON da resposta da IA
-    try {
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsedResult = JSON.parse(jsonMatch[0]);
-        
-        // Validar se tem os campos necessários
-        if (parsedResult.direction && parsedResult.confidence && parsedResult.analysis) {
-          return {
-            direction: parsedResult.direction,
-            confidence: Math.max(70, Math.min(100, parsedResult.confidence)),
-            price: parsedResult.price || `$${realData?.currentPrice.toFixed(2) || '0.00'}`,
-            sentiment: parsedResult.sentiment || 'Neutro',
-            analysis: parsedResult.analysis,
-            reasoning: parsedResult.reasoning || parsedResult.analysis,
-            entry: parsedResult.entry || "Próxima vela 5m",
-            stopLoss: parsedResult.stopLoss || "N/A (Binary Option)",
-            takeProfit: parsedResult.takeProfit || "N/A (Binary Option)",
-            confluences: parsedResult.confluences || 0,
-            riskLevel: parsedResult.risk_level || "MÉDIO"
-          };
-        }
-      }
-    } catch (error) {
-      console.warn('Erro ao processar resposta da IA:', error);
-    }
-
-    // Se não conseguir processar a resposta da IA, usar dados reais para gerar análise
-    if (realData) {
-      return generateRealAnalysis(realData);
-    }
-
-    // Fallback: tentar buscar dados reais novamente
-    const fallbackData = await fetchRealBitcoinData();
-    if (fallbackData) {
-      return generateRealAnalysis(fallbackData);
-    }
-
-    // Último recurso: dados demo
-    return generateDemoAnalysis();
-  };
 
   return (
     <Card className="p-4 bg-card h-full">
@@ -1163,22 +751,22 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
           </div>
         </div>
 
-        {/* Modelo Groq Fixo */}
+        {/* Modelo GPT OSS 120B Fixo */}
         <div className="space-y-3">
           <div className="space-y-2">
-            <Label>Modelo Groq</Label>
+            <Label>Modelo de IA</Label>
             <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-700/30 rounded-lg p-4 backdrop-blur-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                   <div>
-                    <div className="font-semibold text-white">GPT OSS 120B</div>
-                    <div className="text-sm text-blue-300">Modelo GPT de código aberto com 120B parâmetros</div>
+                    <div className="font-semibold text-white">{selectedModelInfo.name}</div>
+                    <div className="text-sm text-blue-300">{selectedModelInfo.description}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-yellow-400"></span>
-                  <span className="text-yellow-400"></span>
+                  <span className="text-yellow-400">{selectedModelInfo.speed}</span>
+                  <span className="text-yellow-400">{selectedModelInfo.quality}</span>
                 </div>
               </div>
             </div>
@@ -1397,7 +985,6 @@ Fornecer uma análise técnica profissional e precisa para operação binária d
               <Button 
                 className="w-full bg-primary hover:bg-primary/90" 
                 onClick={handleAnalysis}
-                disabled={!apiKey.trim()}
               >
                 📊 Analisar BTC/USDT (GPT OSS 120B)
               </Button>
