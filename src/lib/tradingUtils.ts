@@ -435,7 +435,7 @@ export const calculateWeightedConfluence = (signals: SignalData) => {
   };
 };
 
-// Timer para Próxima Vela
+// Timer para Próxima Vela - Sincronizado com Ebinex
 export const getNextCandleTimer = (timeframe: '1m' | '5m' | '15m' | '30m' | '1h' = '5m') => {
   const now = new Date();
   const minutes = now.getMinutes();
@@ -463,7 +463,17 @@ export const getNextCandleTimer = (timeframe: '1m' | '5m' | '15m' | '30m' | '1h'
       minutesToNext = 5 - (minutes % 5);
   }
   
-  const secondsToNext = (minutesToNext - 1) * 60 + (60 - seconds);
+  // Ajustar para sincronizar com Ebinex (31 segundos a menos)
+  let secondsToNext = (minutesToNext - 1) * 60 + (60 - seconds) - 31;
+  
+  // Se ficou negativo, adicionar uma vela completa
+  if (secondsToNext <= 0) {
+    const candleDurationSeconds = timeframe === '1m' ? 60 : 
+                                  timeframe === '5m' ? 300 : 
+                                  timeframe === '15m' ? 900 : 
+                                  timeframe === '30m' ? 1800 : 3600;
+    secondsToNext += candleDurationSeconds;
+  }
   
   return {
     minutes: Math.floor(secondsToNext / 60),
