@@ -46,7 +46,7 @@ interface AnalysisLog {
 export function AnalysisPanel() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [apiKey, setApiKey] = useState(process.env.VITE_GROQ_API_KEY)
+  const [apiKey, setApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || '')
   const [selectedModel, setSelectedModel] = useState("openai/gpt-oss-120b");
   const [analysisLogs, setAnalysisLogs] = useState<AnalysisLog[]>([]);
   const [showLogs, setShowLogs] = useState(false);
